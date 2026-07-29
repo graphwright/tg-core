@@ -1,0 +1,17 @@
+{
+  "postCreateCommand": "npm install -g @anthropic-ai/claude-code",
+  "postAttachCommand": "printf '\\n>>> Use Claude Code (not the Copilot panel) for AI help in this Codespace. Run: claude\\n\\n'",
+  "forwardPorts": [8000],
+  "remoteEnv": {
+    "ANTHROPIC_API_KEY": "${localEnv:ANTHROPIC_API_KEY}"
+  },
+  "customizations": {
+    "vscode": {
+      "settings": {
+        "github.copilot.enable": { "*": false },
+        "github.copilot.editor.enableAutoCompletions": false,
+        "github.copilot.nextEditSuggestions.enabled": false
+      }
+    }
+  }
+}

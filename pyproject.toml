@@ -1,0 +1,49 @@
+[project]
+name = "inf-typed-graph"
+version = "0.1.0"
+description = "Python base package for typed graph"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "httpx2>=2.10.0",
+    "pydantic>=2.13.4",
+]
+
+[project.optional-dependencies]
+reasoning = [
+    "datalog>=0.7.8",
+    "problog>=2.2.10",
+]
+service = [
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.34.0",
+]
+
+[dependency-groups]
+dev = [
+    "black>=26.5.1",
+    "mypy>=2.3.0",
+    "pytest>=9.1.1",
+    "rg>=0.0.76",
+    "ruff>=0.15.21",
+]
+
+[tool.black]
+target-version = ["py312"]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+# --strict-markers so a typo'd @pytest.mark.keystnoe fails loudly instead of
+# silently marking nothing.
+addopts = "--strict-markers"
+# `keystone` records epistemic status, not scheduling: the one check whose
+# failure means nothing below it is meaningful. Orthogonal to cost-per-run
+# markers like `slow`, and stackable with them.
+#
+# Deliberately NOT excluded by default via `addopts = "-m 'not keystone'"`:
+# pytest deselects silently, so a bare run would print green with the
+# load-bearing check absent -- recreating the exact failure this test exists to
+# catch. It skips visibly instead when nothing is listening.
+markers = [
+    "keystone: the load-bearing contract test -- if this fails, nothing else means anything",
+]

@@ -1,0 +1,32 @@
+# Minimal FastAPI service for keystone contract testing
+#
+# Usage:
+#   docker compose up -d --build
+#   curl http://localhost:8000/api/v1/bfs?seed=alice
+#   docker compose down
+#
+# The service exposes the example domain (alice, acme, car1) over HTTP.
+# Endpoints: /healthz, /entities/{id}, /entities/{id}/edges, /bfs
+# See app.py for implementation and tests/test_keystone.py for contract.
+
+services:
+  graph-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: tg-core-graph-api:local
+    ports:
+      - "8000:8000"
+    environment:
+      - LOG_LEVEL=INFO
+    command: >
+      uv run uvicorn app:app
+      --host 0.0.0.0
+      --port 8000
+      --log-level info
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/healthz"]
+      interval: 5s
+      timeout: 3s
+      retries: 3
+      start_period: 5s

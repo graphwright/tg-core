@@ -1,0 +1,83 @@
+services:
+  dev:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        UBUNTU_VERSION: ${UBUNTU_VERSION:-24.04}
+        DEFAULT_WORKDIR: ${WORKDIR_PATH:-/app}
+        DEFAULT_SSH_KEY_PATH: /root/.ssh/ww_id_ed25519
+        DEFAULT_GIT_SSH_OPTIONS: ${GIT_SSH_OPTIONS:--o IdentitiesOnly=yes -o StrictHostKeyChecking=yes}
+    image: typed-graph-dev:local
+    working_dir: ${WORKDIR_PATH:-/app}
+    command:
+      - bash
+      - -lc
+      - |
+        mkdir -p /root/.ssh
+        chmod 0700 /root/.ssh
+        if [[ -z "${GIT_USER_NAME:-}" || -z "${GIT_USER_EMAIL:-}" ]]; then
+          echo "ERROR: GIT_USER_NAME and GIT_USER_EMAIL must be set in .env"
+          exit 1
+        fi
+        if [[ ! -f /root/.ssh/ww_id_ed25519 ]]; then
+          echo "ERROR: /root/.ssh/ww_id_ed25519 is not a file."
+          echo "Check host path: \$HOME/.ssh/${SSH_KEY_FILE:-ww_id_ed25519}"
+          ls -la /root/.ssh || true
+          exit 1
+        fi
+        mode="$(stat -c %a /root/.ssh/ww_id_ed25519 2>/dev/null || stat -f %Lp /root/.ssh/ww_id_ed25519)"
+        echo "Mounted SSH key mode: ${mode}"
+        if [[ "${mode}" != "600" ]] && [[ "${mode}" != "400" ]]; then
+          echo "WARNING: Recommended host key perms are 600 (or 400)."
+        fi
+        git config --global user.name "${GIT_USER_NAME}"
+        git config --global user.email "${GIT_USER_EMAIL}"
+        git config --global user.useConfigOnly true
+        git config --global core.sshCommand "ssh -i /root/.ssh/ww_id_ed25519 ${GIT_SSH_OPTIONS:--o IdentitiesOnly=yes -o StrictHostKeyChecking=yes}"
+        if [[ -d .git ]]; then
+          git config --local user.name "${GIT_USER_NAME}"
+          git config --local user.email "${GIT_USER_EMAIL}"
+          git config --local core.hooksPath .githooks
+          git config --local typedgraph.requiredEmail "${GIT_USER_EMAIL}"
+        fi
+        if [[ -z "${GITHUB_EXPECTED_USERNAME:-}" ]]; then
+          echo "ERROR: GITHUB_EXPECTED_USERNAME must be set in .env"
+          exit 1
+        fi
+        ssh_check="$(ssh -T git@github.com 2>&1 || true)"
+        echo "${ssh_check}"
+        #if ! grep -q "Hi ${GITHUB_EXPECTED_USERNAME}!" <<< "${ssh_check}"; then
+        #  echo "ERROR: Authenticated GitHub account is not ${GITHUB_EXPECTED_USERNAME}."
+        #  exit 1
+        #fi
+        echo "Repo git identity: $(git config --local user.name) <$(git config --local user.email)>"
+        exec bash -l
+    stdin_open: true
+    tty: true
+    volumes:
+      - type: bind
+        source: .
+        target: ${WORKDIR_PATH:-/app}
+      - type: bind
+        source: ${HOME}/.ssh/known_hosts
+        target: /root/.ssh/known_hosts
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${HOME}/.ssh/${SSH_KEY_FILE:-ww_id_ed25519}
+        target: /root/.ssh/ww_id_ed25519
+        read_only: true
+        bind:
+          create_host_path: false
+    environment:
+      GIT_SSH_COMMAND: ssh -i /root/.ssh/ww_id_ed25519 ${GIT_SSH_OPTIONS:--o IdentitiesOnly=yes -o StrictHostKeyChecking=yes}
+      GIT_USER_NAME: ${GIT_USER_NAME:-}
+      GIT_USER_EMAIL: ${GIT_USER_EMAIL:-}
+      GITHUB_EXPECTED_USERNAME: ${GITHUB_EXPECTED_USERNAME:-}
+      GIT_AUTHOR_NAME: ${GIT_USER_NAME:-}
+      GIT_AUTHOR_EMAIL: ${GIT_USER_EMAIL:-}
+      GIT_COMMITTER_NAME: ${GIT_USER_NAME:-}
+      GIT_COMMITTER_EMAIL: ${GIT_USER_EMAIL:-}
+      PIP_INDEX_URL: ${PIP_INDEX_URL:-}

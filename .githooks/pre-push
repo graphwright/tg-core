@@ -1,0 +1,44 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+required_email="$(git config --local --get typedgraph.requiredEmail || true)"
+if [[ -z "${required_email}" ]]; then
+  required_email="wware@alum.mit.edu"
+fi
+
+current_email="$(git config --get user.email || true)"
+if [[ "${current_email}" != "${required_email}" ]]; then
+  echo "ERROR: git user.email is '${current_email}', expected '${required_email}'." >&2
+  echo "Set it with: git config --local user.email '${required_email}'" >&2
+  exit 1
+fi
+
+while read -r local_ref local_sha remote_ref remote_sha; do
+  if [[ -z "${local_sha:-}" ]]; then
+    continue
+  fi
+
+  if [[ "${local_sha}" == "0000000000000000000000000000000000000000" ]]; then
+    continue
+  fi
+
+  if [[ "${remote_sha}" == "0000000000000000000000000000000000000000" ]]; then
+    commit_range="$(git rev-list "${local_sha}" --not --remotes)"
+  else
+    commit_range="$(git rev-list "${remote_sha}..${local_sha}")"
+  fi
+
+  if [[ -z "${commit_range}" ]]; then
+    continue
+  fi
+
+  while IFS='|' read -r commit author_email committer_email; do
+    if [[ "${author_email}" != "${required_email}" || "${committer_email}" != "${required_email}" ]]; then
+      echo "ERROR: Commit ${commit} has author/committer email '${author_email}'/'${committer_email}', expected '${required_email}'." >&2
+      echo "Fix with: git commit --amend --reset-author --no-edit (or rebase for older commits)." >&2
+      exit 1
+    fi
+  done < <(git log --format='%H|%ae|%ce' ${commit_range})
+done
+
+exit 0

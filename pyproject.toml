@@ -5,6 +5,7 @@ description = "Python base package for typed graph"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
+    "problog>=2.2.10",
     "pydantic>=2.13.4",
     "ruff>=0.15.21",
 ]

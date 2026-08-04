@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
-from typing import Generic, TypeVar
+from typing import ClassVar, Generic, TypeVar
 
-from base import BaseStatement, EntityInstance, Symmetric, Transitive
+from pydantic import BaseModel, ConfigDict
+
+from base import AnyStatement, AnyStmt, BaseStatement, EntityInstance, Symmetric, Transitive
 
 
 class SherlockEntity(EntityInstance):
@@ -14,6 +16,9 @@ class SherlockEntity(EntityInstance):
     aliases: tuple[str, ...] = ()
     wiki_url: str | None = None
     raw_type: str | None = None
+
+    def __str__(self) -> str:
+        return self.canonical
 
 
 class Person(SherlockEntity):
@@ -48,8 +53,10 @@ SubjectT = TypeVar("SubjectT", bound=SherlockEntity)
 ObjectT = TypeVar("ObjectT", bound=SherlockEntity)
 
 
-class StoryStatement(BaseStatement[SubjectT, ObjectT], Generic[SubjectT, ObjectT]):
-    """Statement enriched with story-extraction metadata from triplet rows."""
+class StoryMetadata(BaseModel):
+    """Story-extraction metadata shared by extracted (not inferred) predicates."""
+
+    model_config = ConfigDict(frozen=True)
 
     story_id: str
     paragraph_index: int | None = None
@@ -58,6 +65,12 @@ class StoryStatement(BaseStatement[SubjectT, ObjectT], Generic[SubjectT, ObjectT
     extraction_confidence: float | None = None
     narrator_confidence: float | None = None
     raw_extraction_method: str | None = None
+
+
+class StoryStatement(
+    BaseStatement[SubjectT, ObjectT], StoryMetadata, Generic[SubjectT, ObjectT]
+):
+    """Statement enriched with story-extraction metadata from triplet rows."""
 
 
 class Involves(StoryStatement[Event, Person]):
@@ -90,6 +103,19 @@ class HappenedIn(StoryStatement[Event, Location]):
     This captures event->place structure that is often only implicit in event
     identifiers/descriptions from extraction output.
     """
+
+
+class KnewAt(BaseStatement[Person, AnyStmt], StoryMetadata):
+    """A person's epistemic state toward some statement, as of a moment."""
+
+    object_: AnyStatement
+    moment: Moment
+
+
+class Contradicts(BaseStatement[AnyStatement, AnyStatement], StoryMetadata, Symmetric):
+    """One statement contradicts another."""
+
+    provisional: ClassVar[bool] = True
 
 
 class PhysicallyIn(BaseStatement[Object, Location]):

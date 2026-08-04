@@ -217,7 +217,11 @@ def test_load_story_graph_hydrates_higher_order_predicates_in_order(
         ],
     )
     _write_jsonl(tmp_path / "bohemia_events.jsonl", [])
-    _write_jsonl(tmp_path / "bohemia_moments.jsonl", [])
+    moment_id = "sib:moment:holmes_learns_of_watson"
+    _write_jsonl(
+        tmp_path / "bohemia_moments.jsonl",
+        [{"id": moment_id, "label": "The moment Holmes learns of Watson"}],
+    )
     knows_id = "stmt:knows:holmes:watson"
     knew_at_id = "stmt:knew_at:holmes:knows"
     _write_jsonl(
@@ -246,6 +250,7 @@ def test_load_story_graph_hydrates_higher_order_predicates_in_order(
                 "subject_type": "Person",
                 "object_id": knows_id,
                 "object_type": "Knows",
+                "moment_id": moment_id,  # <-- this was missing
                 "truth_status": "asserted_true",
                 "story_id": "scandal_in_bohemia",
                 "paragraph_index": 2,
@@ -286,7 +291,11 @@ def test_load_story_graph_defers_higher_order_rows_until_referenced_statement_ex
         ],
     )
     _write_jsonl(tmp_path / "bohemia_events.jsonl", [])
-    _write_jsonl(tmp_path / "bohemia_moments.jsonl", [])
+    moment_id = "sib:moment:holmes_learns_of_watson"
+    _write_jsonl(
+        tmp_path / "bohemia_moments.jsonl",
+        [{"id": moment_id, "label": "The moment Holmes learns of Watson"}],
+    )
     knows_id = "stmt:knows:holmes:watson"
     knew_at_id = "stmt:knew_at:holmes:knows"
     _write_jsonl(
@@ -299,6 +308,7 @@ def test_load_story_graph_defers_higher_order_rows_until_referenced_statement_ex
                 "subject_type": "Person",
                 "object_id": knows_id,
                 "object_type": "Knows",
+                "moment_id": moment_id,
                 "truth_status": "asserted_true",
                 "story_id": "scandal_in_bohemia",
                 "paragraph_index": 2,
@@ -355,7 +365,6 @@ def test_load_story_graph_hydrates_contradicts_between_statements(
         ],
     )
     _write_jsonl(tmp_path / "bohemia_events.jsonl", [])
-    _write_jsonl(tmp_path / "bohemia_moments.jsonl", [])
     knows_id = "stmt:knows:holmes:watson"
     inverse_knows_id = "stmt:knows:watson:holmes"
     contradicts_id = "stmt:contradicts:knows"
@@ -420,6 +429,8 @@ def test_load_story_graph_hydrates_contradicts_between_statements(
     assert contradicts.subject.id == knows_id
     assert contradicts.object_.id == inverse_knows_id
     assert report.unresolved_higher_order == ()
+
+
 def test_sherlock_entity_str_returns_canonical() -> None:
     holmes = Person(id="wiki:Sherlock_Holmes", canonical="Sherlock Holmes")
 
@@ -448,9 +459,7 @@ def test_story_statement_field_set_is_stable() -> None:
 def test_contradicts_preserves_concrete_statement_types() -> None:
     holmes = Person(id="wiki:Sherlock_Holmes", canonical="Sherlock Holmes")
     watson = Person(id="wiki:John_Watson", canonical="Dr. Watson")
-    baker_street = Location(
-        id="place:221b_baker_street", canonical="221B Baker Street"
-    )
+    baker_street = Location(id="place:221b_baker_street", canonical="221B Baker Street")
     knows = Knows(
         id="stmt:knows",
         subject=holmes,

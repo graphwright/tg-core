@@ -6,7 +6,14 @@ from typing import ClassVar, Generic, TypeVar
 
 from pydantic import BaseModel, ConfigDict
 
-from base import AnyStatement, AnyStmt, BaseStatement, EntityInstance, Symmetric, Transitive
+from base import (
+    AnyStatement,
+    AnyStmt,
+    BaseStatement,
+    EntityInstance,
+    Symmetric,
+    Transitive,
+)
 
 
 class SherlockEntity(EntityInstance):
@@ -115,6 +122,8 @@ class KnewAt(BaseStatement[Person, AnyStmt], StoryMetadata):
 class Contradicts(BaseStatement[AnyStatement, AnyStatement], StoryMetadata, Symmetric):
     """One statement contradicts another."""
 
+    subject: AnyStatement
+    object_: AnyStatement
     provisional: ClassVar[bool] = True
 
 

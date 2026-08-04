@@ -14,7 +14,6 @@ import argparse
 import os
 from collections import Counter
 from pathlib import Path
-from typing import cast
 
 from datalog import Engine
 from rules import Rule, lit, variables
@@ -120,7 +119,7 @@ def _asserted_facts(graph: Graph) -> list[AnyStmt]:
     facts: list[AnyStmt] = []
     for inst in graph.by_id.values():
         if isinstance(inst, BaseStatement):
-            facts.append(cast(AnyStmt, inst))
+            facts.append(inst)
     return sorted(facts, key=lambda stmt: stmt.id)
 
 

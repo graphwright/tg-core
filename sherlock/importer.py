@@ -147,7 +147,8 @@ def _ensure_entity(
 
 
 def _is_statement_slot(predicate_cls: PredicateType, field_name: str) -> bool:
-    annotation = get_type_hints(predicate_cls, include_extras=True)[field_name]
+    real_field = "object_" if field_name == "object" else field_name
+    annotation = get_type_hints(predicate_cls, include_extras=True)[real_field]
     if annotation is AnyStatement:
         return True
     try:
@@ -216,13 +217,19 @@ def _build_statement(
     sentence_ids_raw = cast(list[int] | None, row.get("sentence_ids"))
     sentence_ids = tuple(sentence_ids_raw or [])
 
-    stmt_kwargs = dict(
+    stmt_kwargs: dict[str, Any] = dict(
         id=cast(str, row["id"]),
         subject=subject,
         object_=object_,
         truth_status=truth_status,
         provenance=(provenance,),
     )
+    if "moment" in predicate_cls.model_fields:
+        moment_id = cast(str | None, row.get("moment_id"))
+        moment_inst = registry.get(moment_id) if moment_id else None
+        if not isinstance(moment_inst, Moment):
+            return None, 0, True  # defer/skip: moment not yet loaded or missing
+        stmt_kwargs["moment"] = moment_inst
     if issubclass(predicate_cls, StoryMetadata):
         stmt_kwargs.update(
             story_id=cast(str, row.get("story_id", story_prefix)),

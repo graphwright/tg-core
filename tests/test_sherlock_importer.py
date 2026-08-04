@@ -8,8 +8,20 @@ from typing import Any
 
 import pytest
 
+from base import Symmetric, Trait, get_inverse
 from sherlock.importer import load_story_graph
-from sherlock.schema import Event, HappenedIn, Involves, Moment, Person
+from sherlock.schema import (
+    AssociatedWith,
+    Contradicts,
+    Event,
+    HappenedIn,
+    Involves,
+    KnewAt,
+    Knows,
+    Location,
+    Moment,
+    Person,
+)
 
 
 def _write_jsonl(path: Path, rows: list[dict[str, Any]]) -> None:
@@ -182,3 +194,88 @@ def test_load_story_graph_adds_carry_event_location_hint_if_available() -> None:
     assert any(
         edge.object_.id == "place:irene_adlers_sitting-room" for edge in hinted_edges
     )
+
+
+def test_sherlock_entity_str_returns_canonical() -> None:
+    holmes = Person(id="wiki:Sherlock_Holmes", canonical="Sherlock Holmes")
+
+    assert str(holmes) == holmes.canonical
+
+
+def test_story_statement_field_set_is_stable() -> None:
+    expected = {
+        "id",
+        "subject",
+        "object_",
+        "truth_status",
+        "provenance",
+        "story_id",
+        "paragraph_index",
+        "sentence_ids",
+        "asserting_narrator_id",
+        "extraction_confidence",
+        "narrator_confidence",
+        "raw_extraction_method",
+    }
+
+    assert set(Involves.model_fields) == expected
+
+
+def test_contradicts_preserves_concrete_statement_types() -> None:
+    holmes = Person(id="wiki:Sherlock_Holmes", canonical="Sherlock Holmes")
+    watson = Person(id="wiki:John_Watson", canonical="Dr. Watson")
+    baker_street = Location(
+        id="place:221b_baker_street", canonical="221B Baker Street"
+    )
+    knows = Knows(
+        id="stmt:knows",
+        subject=holmes,
+        object_=watson,
+        truth_status="asserted_true",
+        story_id="story",
+    )
+    associated = AssociatedWith(
+        id="stmt:associated",
+        subject=holmes,
+        object_=baker_street,
+        truth_status="asserted_true",
+        story_id="story",
+    )
+    contradicts = Contradicts(
+        id="stmt:contradicts",
+        subject=knows,
+        object_=associated,
+        truth_status="asserted_true",
+        story_id="story",
+    )
+
+    assert contradicts.subject is knows
+    assert contradicts.object_ is associated
+    assert isinstance(contradicts.subject, Knows)
+    assert isinstance(contradicts.object_, AssociatedWith)
+    assert issubclass(Contradicts, Symmetric)
+    assert issubclass(Contradicts, Trait)
+
+
+def test_knew_at_has_no_inverse() -> None:
+    holmes = Person(id="wiki:Sherlock_Holmes", canonical="Sherlock Holmes")
+    watson = Person(id="wiki:John_Watson", canonical="Dr. Watson")
+    moment = Moment(id="sib:moment:1", canonical="A moment")
+    knows = Knows(
+        id="stmt:knows",
+        subject=holmes,
+        object_=watson,
+        truth_status="asserted_true",
+        story_id="story",
+    )
+    knew_at = KnewAt(
+        id="stmt:knew-at",
+        subject=holmes,
+        object_=knows,
+        moment=moment,
+        truth_status="asserted_true",
+        story_id="story",
+    )
+
+    assert knew_at.object_ is knows
+    assert get_inverse(KnewAt) is None

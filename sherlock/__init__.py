@@ -13,9 +13,11 @@ from sherlock.problog_scenario import (
 )
 from sherlock.schema import (
     AssociatedWith,
+    Contradicts,
     Event,
     HappenedIn,
     Involves,
+    KnewAt,
     Knows,
     LocatedIn,
     Location,
@@ -31,11 +33,13 @@ from sherlock.schema import (
 
 __all__ = [
     "AssociatedWith",
+    "Contradicts",
     "Event",
     "EvidenceObservation",
     "HappenedIn",
     "ImportReport",
     "Involves",
+    "KnewAt",
     "Knows",
     "LocatedIn",
     "Location",

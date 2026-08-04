@@ -290,7 +290,7 @@ Use these terms consistently throughout the book. Do not treat them as synonyms.
 | **Entity instance**   | A member of $V$ with $\tau(v) \in T_\text{ent}$. A concrete node — an instance of an `EntityInstance` subclass with an `id` and data fields. Example: a specific `Person` instance for Sherlock Holmes. A Statement is *not* an entity instance; both are Instances. |
 | **Statement**         | A member of $V$ with $\tau(v) \in T_\text{pred}$. A concrete proposition — an instance of a `BaseStatement` subclass with an `id`, a `subject`, an `object_`, a `truth_status`, and metadata fields. Also a member of $E$ (the derived edge set). The term "edge instance" is an informal synonym when traversing the asserted graph. |
 | **Field schema**      | $\Phi(t)$: the Pydantic model declaration of named fields and their types for type $t$. For predicate types, $\Phi$ includes `subject`, `object_`, and `truth_status` as distinguished fields whose type annotations constitute domain, range, and truth semantics. |
-| **Domain**            | $\text{dom}(p)$ — the set of types permitted in the subject role for predicate $p$. Read from the type annotation of `subject` in $\Phi(p)$. |
+| **Domain**            | $\text{dom}(p)$ — the set of types permitted in the subject role for predicate $p$. Read from the type annotation of `subject` in $\Phi(p)$. When $\text{dom}(p)$ includes a predicate type (i.e. a `BaseStatement` subclass), predicate $p$ takes a statement as its subject — see R8. |
 | **Range**             | $\text{ran}(p)$ — the set of types permitted in the object role for predicate $p$. Read from the type annotation of `object_` in $\Phi(p)$. When $\text{ran}(p)$ includes a predicate type (i.e. a `BaseStatement` subclass), predicate $p$ enables higher-order claims. |
 | **Trait**             | A declarative semantic property of a predicate type. Member of $\text{Tr}(p)$. Belongs to the schema, not to any instance. Realized as a Python mixin class. |
 | **Schema**            | The tuple $(T,\ \Phi)$ together with trait declarations. Fixed at graph-design time. |
@@ -354,30 +354,44 @@ name `object_` is used throughout to avoid shadowing the Python builtin `object`
 mutated after construction.
 
 **R8. Higher-order predication is a schema-level type declaration, not a runtime
-promotion.** A predicate enables higher-order claims when its range includes a
-predicate type (a `BaseStatement` subclass). This is declared once in $\Phi$ at
-schema design time — e.g. `object_: BaseStatement` on `KnewAt`. There is no runtime
-"promotion" of instances between layers. Every predicate instance is a referable
-member of $V$ from birth; whether any other predicate can point at it is determined
-by the type declarations in $\Phi$.
+promotion.** A predicate enables higher-order claims when its domain, its range,
+or both include a predicate type (a `BaseStatement` subclass). This is declared
+once in $\Phi$ at schema design time — e.g. `object_: BaseStatement` on `KnewAt`
+(object-only, because it expresses an agent's epistemic attitude toward a
+proposition), or `subject: BaseStatement` and `object_: BaseStatement` together
+on `Contradicts` (both slots, because it expresses a symmetric relation between
+two propositions with no agent role at all). There is no runtime "promotion" of
+instances between layers. Every predicate instance is a referable member of $V$
+from birth; whether any other predicate can point at it — as subject or as object
+— is determined by the type declarations in $\Phi$.
 
-The object's concrete predicate type must be **preserved** when it is stored: if a
-`WorksFor` instance is the object of a `Believes`, `Believes.object_` must remain a
-`WorksFor`, not be silently downcast to `BaseStatement` — otherwise you can no longer
-tell *which* proposition is being predicated over (its $\tau$, its traits, its
-inverse), which is the whole point of R8. In the Python realization a range of "any
-statement" is therefore declared as `InstanceOf[BaseStatement]` (exported as
-`AnyStatement`), which validates by `isinstance` and keeps the instance as-is; a
-bare or `Any`-parametrized `BaseStatement[...]` range would rebuild the object as the
-base class and lose $\tau$. Trade-off: an object supplied as a raw dict is rejected —
-statements are reconstructed by the loader and passed as instances.
+The two slots are not required to be symmetric on any given predicate. Agentive
+predicates (an agent bearing an attitude toward a proposition) naturally keep
+`subject` entity-typed and only loosen `object_`. Relational predicates *between*
+propositions (dispute-tracking, contradiction) may declare both slots as
+statement-typed. R8 permits a predicate type to declare `BaseStatement` in either
+or both positions; R6 field-typing and the preservation rule below then govern
+what is stored there.
+
+The referenced statement's concrete predicate type must be **preserved** when it
+is stored, in either role: if a `WorksFor` instance is the subject or object of
+some predicate, that field must remain a `WorksFor`, not be silently downcast to
+`BaseStatement` — otherwise you can no longer tell *which* proposition is being
+predicated over (its $\tau$, its traits, its inverse), which is the whole point of
+R8. In the Python realization a domain or range of "any statement" is therefore
+declared as `InstanceOf[BaseStatement]` (exported as `AnyStatement`), which
+validates by `isinstance` and keeps the instance as-is; a bare or
+`Any`-parametrized `BaseStatement[...]` slot would rebuild the referenced instance
+as the base class and lose $\tau$. Trade-off: a referenced statement supplied as a
+raw dict is rejected — statements are reconstructed by the loader and passed as
+instances.
 
 Do **not** use higher-order predication to attach provenance, confidence, or
 epistemic metadata to a proposition. That is R2's job — such fields belong on the
 instance directly, declared in $\Phi$. Higher-order predication is for *predicating
-over* a proposition (knowing it, disputing it, supporting it), not for *annotating*
-one. Using it for annotation reintroduces exactly the overhead this model exists to
-reject (see Non-Goals: *Not RDF/OWL*).
+over* a proposition (knowing it, disputing it, contradicting it), not for
+*annotating* one. Using it for annotation reintroduces exactly the overhead this
+model exists to reject (see Non-Goals: *Not RDF/OWL*).
 
 **R9. Every instance has a canonical, stable identifier; display is separate.** The
 `id` field is assigned at construction and does not change. For entity instances that
@@ -489,7 +503,6 @@ The worked example uses the Sherlock Holmes canon as domain.
 - **Primary stories**: "A Scandal in Bohemia" (complete); "The Speckled Band" (planned)
 - **Provisional entity types**: `Person`, `Location`, `Object`, `Document`,
   `Moment`, `Event`, `Persona`, `Plan`
-- **Higher-order predicates**: `KnewAt`, `Contradicts` — these take `BaseStatement`
-  in their range, enabling epistemic and dispute tracking
+- **Higher-order predicates**: `KnewAt` (statement in range only — an agent's epistemic attitude toward a proposition), `Contradicts` (statement in both domain and range — a symmetric relation between two propositions, no agent role)
 - **Epistemic fields on predicate instances**: `moment`, `narrator_confidence`,
   provenance fields

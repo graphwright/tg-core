@@ -10,6 +10,7 @@ import sys
 from typing import (
     Any,
     cast,
+    ClassVar,
     Dict,
     ForwardRef,
     Generic,
@@ -57,6 +58,7 @@ class Instance(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     id: str
+    provisional: ClassVar[bool] = False
 
 
 class EntityInstance(Instance):
@@ -64,7 +66,7 @@ class EntityInstance(Instance):
     subclasses of this."""
 
 
-SubjectT = TypeVar("SubjectT", bound=EntityInstance)
+SubjectT = TypeVar("SubjectT", bound=Instance)
 ObjectT = TypeVar("ObjectT", bound=Instance)
 
 
@@ -79,10 +81,16 @@ class BaseStatement(Instance, Generic[SubjectT, ObjectT]):
     one type. There is no custom validation; mypy enforces membership statically
     and Pydantic at construction time.
 
-    ObjectT is bound to Instance (not EntityInstance) so a statement's object may
-    itself be a statement (higher-order predication). For a range of "any
-    statement", use `AnyStatement` (below) rather than a bare or Any-parametrized
-    BaseStatement, so the object's concrete predicate type is preserved.
+    Both SubjectT and ObjectT are bound to Instance (not EntityInstance), so
+    either slot may be filled by a statement as well as an entity. Agentive
+    predicates (e.g. KnewAt, an agent's attitude toward a proposition) typically
+    keep their subject entity-typed by restricting SubjectT in their own
+    declaration; symmetric relational predicates over propositions (e.g.
+    Contradicts) may declare both slots as statement-typed. See R8.
+
+    For a domain or range of "any statement", use `AnyStatement` (below) rather
+    than a bare or Any-parametrized BaseStatement, so the concrete predicate type
+    is preserved.
 
     `provenance` is stored as `tuple[Provenance, ...] | None`. For convenience,
     callers may pass a single `Provenance` or a `list[Provenance]`; the validator
@@ -130,12 +138,12 @@ class BaseStatement(Instance, Generic[SubjectT, ObjectT]):
             validate(cls)
 
 
-# An object range meaning "any statement" (higher-order predication). Use this
+# A domain or range meaning "any statement" (higher-order predication). Use this
 # rather than a bare or Any-parametrized BaseStatement: InstanceOf validates by
-# isinstance and keeps the value as-is, so the object's concrete predicate type
-# (tau) is preserved. A parametrized `BaseStatement[Any, Any]` range would
-# instead rebuild the object as the base class, discarding its type. Trade-off:
-# an object supplied as a raw dict is rejected -- reconstruct statements via the
+# isinstance and keeps the value as-is, so the statement's concrete predicate type
+# (tau) is preserved. A parametrized `BaseStatement[Any, Any]` slot would instead
+# rebuild the stored value as the base class, discarding its type. Trade-off: a
+# statement supplied as a raw dict is rejected -- reconstruct statements via the
 # loader and pass instances, which is what the serialization design does anyway.
 AnyStatement = InstanceOf[BaseStatement[Any, Any]]
 
@@ -152,34 +160,40 @@ AnyStmt: TypeAlias = BaseStatement[Any, Any]
 #
 #     class Knows(BaseStatement[Person, Person], Symmetric): ...
 #
-# The unparameterized traits are plain markers, introspectable with
-# issubclass(). Inverse is generic, parameterized by the partner predicate
-# type and resolved with get_inverse(). Rule (the Datalog escape hatch) has no
-# clean type-level expression, so it is declared in prose on the predicate
-# class and realized as a callable the inference engine invokes -- not here.
+# All traits share a common `Trait` marker base, enabling uniform introspection
+# with issubclass(x, Trait). The unparameterized traits are plain markers,
+# introspectable with issubclass(). Inverse is generic, parameterized by the
+# partner predicate type and resolved with get_inverse(). Rule (the Datalog
+# escape hatch) has no clean type-level expression, so it is declared in prose
+# on the predicate class and realized as a callable the inference engine
+# invokes -- not here.
 # ---------------------------------------------------------------------------
 
 
-class Symmetric:
+class Trait:
+    """Marker base for all semantic predicate traits, enabling issubclass(x, Trait)."""
+
+
+class Symmetric(Trait):
     """p(x, y) implies p(y, x)."""
 
 
-class Transitive:
+class Transitive(Trait):
     """p(x, y) and p(y, z) imply p(x, z)."""
 
 
-class Functional:
+class Functional(Trait):
     """Each subject has at most one object under p."""
 
 
-class InverseFunctional:
+class InverseFunctional(Trait):
     """Each object has at most one subject under p."""
 
 
 PartnerT = TypeVar("PartnerT", bound=BaseStatement[Any, Any])
 
 
-class Inverse(Generic[PartnerT]):
+class Inverse(Trait, Generic[PartnerT]):
     """p(x, y) implies p'(y, x), where the partner predicate p' is supplied as
     the type argument -- e.g. class ChildOf(BaseStatement[...], Inverse[ParentOf]).
 

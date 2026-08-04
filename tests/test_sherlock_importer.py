@@ -9,7 +9,16 @@ from typing import Any
 import pytest
 
 from sherlock.importer import load_story_graph
-from sherlock.schema import Event, HappenedIn, Involves, Moment, Person
+from sherlock.schema import (
+    Contradicts,
+    Event,
+    HappenedIn,
+    Involves,
+    KnewAt,
+    Knows,
+    Moment,
+    Person,
+)
 
 
 def _write_jsonl(path: Path, rows: list[dict[str, Any]]) -> None:
@@ -182,3 +191,229 @@ def test_load_story_graph_adds_carry_event_location_hint_if_available() -> None:
     assert any(
         edge.object_.id == "place:irene_adlers_sitting-room" for edge in hinted_edges
     )
+
+
+def test_load_story_graph_hydrates_higher_order_predicates_in_order(
+    tmp_path: Path,
+) -> None:
+    _write_jsonl(
+        tmp_path / "bohemia_entities.jsonl",
+        [
+            {
+                "canonical": "Sherlock Holmes",
+                "aliases": ["Holmes"],
+                "type": "person",
+                "entity_id": "wiki:Sherlock_Holmes",
+            },
+            {
+                "canonical": "Dr. Watson",
+                "aliases": ["Watson"],
+                "type": "person",
+                "entity_id": "wiki:John_Watson",
+            },
+        ],
+    )
+    _write_jsonl(tmp_path / "bohemia_events.jsonl", [])
+    _write_jsonl(tmp_path / "bohemia_moments.jsonl", [])
+    knows_id = "stmt:knows:holmes:watson"
+    knew_at_id = "stmt:knew_at:holmes:knows"
+    _write_jsonl(
+        tmp_path / "bohemia_triplets.jsonl",
+        [
+            {
+                "id": knows_id,
+                "predicate": "Knows",
+                "subject_id": "wiki:Sherlock_Holmes",
+                "subject_type": "Person",
+                "object_id": "wiki:John_Watson",
+                "object_type": "Person",
+                "truth_status": "asserted_true",
+                "story_id": "scandal_in_bohemia",
+                "paragraph_index": 1,
+                "sentence_ids": [1],
+                "asserting_narrator_id": None,
+                "extraction_method": "model_extraction",
+                "extraction_confidence": 0.99,
+                "narrator_confidence": None,
+            },
+            {
+                "id": knew_at_id,
+                "predicate": "KnewAt",
+                "subject_id": "wiki:Sherlock_Holmes",
+                "subject_type": "Person",
+                "object_id": knows_id,
+                "object_type": "Knows",
+                "truth_status": "asserted_true",
+                "story_id": "scandal_in_bohemia",
+                "paragraph_index": 2,
+                "sentence_ids": [2],
+                "asserting_narrator_id": None,
+                "extraction_method": "model_extraction",
+                "extraction_confidence": 0.95,
+                "narrator_confidence": None,
+            },
+        ],
+    )
+
+    graph, report = load_story_graph(tmp_path)
+
+    knew_edges = graph.edges_from("wiki:Sherlock_Holmes", pred_type=KnewAt)
+    assert len(knew_edges) == 1
+    assert isinstance(knew_edges[0].object_, Knows)
+    assert knew_edges[0].object_.id == knows_id
+    assert report.unresolved_higher_order == ()
+
+
+def test_load_story_graph_defers_higher_order_rows_until_referenced_statement_exists(
+    tmp_path: Path,
+) -> None:
+    _write_jsonl(
+        tmp_path / "bohemia_entities.jsonl",
+        [
+            {
+                "canonical": "Sherlock Holmes",
+                "type": "person",
+                "entity_id": "wiki:Sherlock_Holmes",
+            },
+            {
+                "canonical": "Dr. Watson",
+                "type": "person",
+                "entity_id": "wiki:John_Watson",
+            },
+        ],
+    )
+    _write_jsonl(tmp_path / "bohemia_events.jsonl", [])
+    _write_jsonl(tmp_path / "bohemia_moments.jsonl", [])
+    knows_id = "stmt:knows:holmes:watson"
+    knew_at_id = "stmt:knew_at:holmes:knows"
+    _write_jsonl(
+        tmp_path / "bohemia_triplets.jsonl",
+        [
+            {
+                "id": knew_at_id,
+                "predicate": "KnewAt",
+                "subject_id": "wiki:Sherlock_Holmes",
+                "subject_type": "Person",
+                "object_id": knows_id,
+                "object_type": "Knows",
+                "truth_status": "asserted_true",
+                "story_id": "scandal_in_bohemia",
+                "paragraph_index": 2,
+                "sentence_ids": [2],
+                "asserting_narrator_id": None,
+                "extraction_method": "model_extraction",
+                "extraction_confidence": 0.95,
+                "narrator_confidence": None,
+            },
+            {
+                "id": knows_id,
+                "predicate": "Knows",
+                "subject_id": "wiki:Sherlock_Holmes",
+                "subject_type": "Person",
+                "object_id": "wiki:John_Watson",
+                "object_type": "Person",
+                "truth_status": "asserted_true",
+                "story_id": "scandal_in_bohemia",
+                "paragraph_index": 1,
+                "sentence_ids": [1],
+                "asserting_narrator_id": None,
+                "extraction_method": "model_extraction",
+                "extraction_confidence": 0.99,
+                "narrator_confidence": None,
+            },
+        ],
+    )
+
+    graph, report = load_story_graph(tmp_path)
+
+    knew_edges = graph.edges_from("wiki:Sherlock_Holmes", pred_type=KnewAt)
+    assert len(knew_edges) == 1
+    assert isinstance(knew_edges[0].object_, Knows)
+    assert knew_edges[0].object_.id == knows_id
+    assert report.unresolved_higher_order == ()
+
+
+def test_load_story_graph_hydrates_contradicts_between_statements(
+    tmp_path: Path,
+) -> None:
+    _write_jsonl(
+        tmp_path / "bohemia_entities.jsonl",
+        [
+            {
+                "canonical": "Sherlock Holmes",
+                "type": "person",
+                "entity_id": "wiki:Sherlock_Holmes",
+            },
+            {
+                "canonical": "Dr. Watson",
+                "type": "person",
+                "entity_id": "wiki:John_Watson",
+            },
+        ],
+    )
+    _write_jsonl(tmp_path / "bohemia_events.jsonl", [])
+    _write_jsonl(tmp_path / "bohemia_moments.jsonl", [])
+    knows_id = "stmt:knows:holmes:watson"
+    inverse_knows_id = "stmt:knows:watson:holmes"
+    contradicts_id = "stmt:contradicts:knows"
+    _write_jsonl(
+        tmp_path / "bohemia_triplets.jsonl",
+        [
+            {
+                "id": knows_id,
+                "predicate": "Knows",
+                "subject_id": "wiki:Sherlock_Holmes",
+                "subject_type": "Person",
+                "object_id": "wiki:John_Watson",
+                "object_type": "Person",
+                "truth_status": "asserted_true",
+                "story_id": "scandal_in_bohemia",
+                "paragraph_index": 1,
+                "sentence_ids": [1],
+                "asserting_narrator_id": None,
+                "extraction_method": "model_extraction",
+                "extraction_confidence": 0.99,
+                "narrator_confidence": None,
+            },
+            {
+                "id": inverse_knows_id,
+                "predicate": "Knows",
+                "subject_id": "wiki:John_Watson",
+                "subject_type": "Person",
+                "object_id": "wiki:Sherlock_Holmes",
+                "object_type": "Person",
+                "truth_status": "asserted_false",
+                "story_id": "scandal_in_bohemia",
+                "paragraph_index": 2,
+                "sentence_ids": [2],
+                "asserting_narrator_id": None,
+                "extraction_method": "model_extraction",
+                "extraction_confidence": 0.8,
+                "narrator_confidence": None,
+            },
+            {
+                "id": contradicts_id,
+                "predicate": "Contradicts",
+                "subject_id": knows_id,
+                "subject_type": "Knows",
+                "object_id": inverse_knows_id,
+                "object_type": "Knows",
+                "truth_status": "asserted_true",
+                "story_id": "scandal_in_bohemia",
+                "paragraph_index": 3,
+                "sentence_ids": [3],
+                "asserting_narrator_id": None,
+                "extraction_method": "model_extraction",
+                "extraction_confidence": 0.9,
+                "narrator_confidence": None,
+            },
+        ],
+    )
+
+    graph, report = load_story_graph(tmp_path)
+
+    contradicts = graph.get(contradicts_id)
+    assert isinstance(contradicts, Contradicts)
+    assert contradicts.subject.id == knows_id
+    assert contradicts.object_.id == inverse_knows_id
+    assert report.unresolved_higher_order == ()

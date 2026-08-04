@@ -5,15 +5,19 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Iterable, cast
+from typing import Any, Iterable, cast, get_args, get_origin, get_type_hints
 
-from base import ExtractionMethod, Provenance, TruthStatus
+from pydantic import InstanceOf
+
+from base import AnyStatement, BaseStatement, ExtractionMethod, Provenance, TruthStatus
 from graph import Graph
 from sherlock.schema import (
     AssociatedWith,
+    Contradicts,
     Event,
     HappenedIn,
     Involves,
+    KnewAt,
     Knows,
     LocatedIn,
     Location,
@@ -25,11 +29,11 @@ from sherlock.schema import (
     Person,
     Possesses,
     SherlockEntity,
-    StoryStatement,
+    StoryMetadata,
 )
 
 EntityType = type[SherlockEntity]
-PredicateType = type[StoryStatement[Any, Any]]
+PredicateType = type[BaseStatement[Any, Any]]
 
 
 @dataclass(frozen=True)
@@ -42,6 +46,7 @@ class ImportReport:
     statements_loaded: int
     placeholders_created: int
     skipped_low_confidence: int
+    unresolved_higher_order: tuple[str, ...]
     unknown_predicates: tuple[str, ...]
 
 
@@ -72,6 +77,8 @@ _PREDICATE_MAP: dict[str, PredicateType] = {
     "Knows": Knows,
     "LocatedIn": LocatedIn,
     "HappenedIn": HappenedIn,
+    "KnewAt": KnewAt,
+    "Contradicts": Contradicts,
 }
 
 # Curated event->location hints for places that appear in event ids/descriptions
@@ -141,6 +148,99 @@ def _ensure_entity(
     return created, True
 
 
+def _is_statement_slot(predicate_cls: PredicateType, field_name: str) -> bool:
+    annotation = get_type_hints(predicate_cls, include_extras=True)[field_name]
+    if annotation is AnyStatement:
+        return True
+    origin = get_origin(annotation)
+    if origin is InstanceOf:
+        args = get_args(annotation)
+        return bool(args) and args[0] is BaseStatement[Any, Any]
+    try:
+        return isinstance(annotation, type) and issubclass(annotation, BaseStatement)
+    except TypeError:
+        return False
+
+
+def _resolve_slot(
+    *,
+    predicate_cls: PredicateType,
+    field_name: str,
+    row: dict[str, Any],
+    registry: dict[str, SherlockEntity],
+    statement_registry: dict[str, BaseStatement[Any, Any]],
+) -> tuple[object | None, bool, bool]:
+    slot_id = cast(str, row[f"{field_name}_id"])
+    if _is_statement_slot(predicate_cls, field_name):
+        stmt = statement_registry.get(slot_id)
+        return stmt, False, stmt is None
+
+    entity, created = _ensure_entity(
+        registry,
+        slot_id,
+        raw_type=cast(str | None, row.get(f"{field_name}_type")),
+    )
+    return entity, created, False
+
+
+def _build_statement(
+    *,
+    row: dict[str, Any],
+    predicate_cls: PredicateType,
+    registry: dict[str, SherlockEntity],
+    statement_registry: dict[str, BaseStatement[Any, Any]],
+    triplets_path: Path,
+    story_prefix: str,
+) -> tuple[BaseStatement[Any, Any] | None, int, bool]:
+    subject, subject_created, subject_missing = _resolve_slot(
+        predicate_cls=predicate_cls,
+        field_name="subject",
+        row=row,
+        registry=registry,
+        statement_registry=statement_registry,
+    )
+    object_, object_created, object_missing = _resolve_slot(
+        predicate_cls=predicate_cls,
+        field_name="object",
+        row=row,
+        registry=registry,
+        statement_registry=statement_registry,
+    )
+    if subject_missing or object_missing:
+        return None, 0, True
+
+    raw_truth = cast(str, row.get("truth_status", "hypothetical"))
+    truth_status = cast(TruthStatus, raw_truth)
+    raw_method = cast(str | None, row.get("extraction_method"))
+    provenance = Provenance(
+        source=f"{triplets_path.name}:{cast(str, row['id'])}:{raw_method or 'unknown'}",
+        extraction_method=_coerce_extraction_method(raw_method),
+    )
+    sentence_ids_raw = cast(list[int] | None, row.get("sentence_ids"))
+    sentence_ids = tuple(sentence_ids_raw or [])
+
+    stmt_kwargs = dict(
+        id=cast(str, row["id"]),
+        subject=subject,
+        object_=object_,
+        truth_status=truth_status,
+        provenance=(provenance,),
+    )
+    if issubclass(predicate_cls, StoryMetadata):
+        stmt_kwargs.update(
+            story_id=cast(str, row.get("story_id", story_prefix)),
+            paragraph_index=cast(int | None, row.get("paragraph_index")),
+            sentence_ids=sentence_ids,
+            asserting_narrator_id=cast(str | None, row.get("asserting_narrator_id")),
+            extraction_confidence=cast(float | None, row.get("extraction_confidence")),
+            narrator_confidence=cast(float | None, row.get("narrator_confidence")),
+            raw_extraction_method=raw_method,
+        )
+
+    stmt = predicate_cls(**stmt_kwargs)
+    return stmt, int(subject_created) + int(object_created), False
+
+
 def load_story_graph(
     dataset_dir: str | Path,
     story_prefix: str = "bohemia",
@@ -172,7 +272,9 @@ def load_story_graph(
     statements_loaded = 0
     placeholders_created = 0
     skipped_low_confidence = 0
+    unresolved_higher_order: list[str] = []
     unknown_predicates: set[str] = set()
+    statement_registry: dict[str, BaseStatement[Any, Any]] = {}
 
     for row in _iter_jsonl(entities_path):
         entity_id = cast(str, row["entity_id"])
@@ -218,7 +320,8 @@ def load_story_graph(
             elif isinstance(moment, Moment):
                 moments_loaded += 1
 
-    statements: list[StoryStatement[Any, Any]] = []
+    statements: list[BaseStatement[Any, Any]] = []
+    deferred_rows: list[tuple[dict[str, Any], PredicateType]] = []
 
     for row in _iter_jsonl(triplets_path):
         extraction_confidence = cast(float | None, row.get("extraction_confidence"))
@@ -235,53 +338,48 @@ def load_story_graph(
         if predicate_cls is None:
             unknown_predicates.add(predicate_name)
             continue
-
-        subject_id = cast(str, row["subject_id"])
-        object_id = cast(str, row["object_id"])
-
-        subject, subject_created = _ensure_entity(
-            registry,
-            subject_id,
-            raw_type=cast(str | None, row.get("subject_type")),
+        stmt, created_count, deferred = _build_statement(
+            row=row,
+            predicate_cls=predicate_cls,
+            registry=registry,
+            statement_registry=statement_registry,
+            triplets_path=triplets_path,
+            story_prefix=story_prefix,
         )
-        object_, object_created = _ensure_entity(
-            registry,
-            object_id,
-            raw_type=cast(str | None, row.get("object_type")),
-        )
-        if subject_created:
-            placeholders_created += 1
-        if object_created:
-            placeholders_created += 1
-
-        raw_truth = cast(str, row.get("truth_status", "hypothetical"))
-        truth_status = cast(TruthStatus, raw_truth)
-
-        raw_method = cast(str | None, row.get("extraction_method"))
-        provenance = Provenance(
-            source=f"{triplets_path.name}:{cast(str, row['id'])}:{raw_method or 'unknown'}",
-            extraction_method=_coerce_extraction_method(raw_method),
-        )
-
-        sentence_ids_raw = cast(list[int] | None, row.get("sentence_ids"))
-        sentence_ids = tuple(sentence_ids_raw or [])
-
-        stmt = predicate_cls(
-            id=cast(str, row["id"]),
-            subject=subject,
-            object_=object_,
-            truth_status=truth_status,
-            provenance=(provenance,),
-            story_id=cast(str, row.get("story_id", story_prefix)),
-            paragraph_index=cast(int | None, row.get("paragraph_index")),
-            sentence_ids=sentence_ids,
-            asserting_narrator_id=cast(str | None, row.get("asserting_narrator_id")),
-            extraction_confidence=extraction_confidence,
-            narrator_confidence=cast(float | None, row.get("narrator_confidence")),
-            raw_extraction_method=raw_method,
-        )
+        if deferred:
+            deferred_rows.append((row, predicate_cls))
+            continue
+        assert stmt is not None
+        placeholders_created += created_count
         statements.append(stmt)
+        statement_registry[stmt.id] = stmt
         statements_loaded += 1
+
+    while deferred_rows:
+        next_deferred: list[tuple[dict[str, Any], PredicateType]] = []
+        progress_made = False
+        for row, predicate_cls in deferred_rows:
+            stmt, created_count, deferred = _build_statement(
+                row=row,
+                predicate_cls=predicate_cls,
+                registry=registry,
+                statement_registry=statement_registry,
+                triplets_path=triplets_path,
+                story_prefix=story_prefix,
+            )
+            if deferred:
+                next_deferred.append((row, predicate_cls))
+                continue
+            assert stmt is not None
+            placeholders_created += created_count
+            statements.append(stmt)
+            statement_registry[stmt.id] = stmt
+            statements_loaded += 1
+            progress_made = True
+        if not progress_made:
+            unresolved_higher_order = [cast(str, row["id"]) for row, _ in next_deferred]
+            break
+        deferred_rows = next_deferred
 
     existing_statement_ids = {stmt.id for stmt in statements}
     for event_id, location_id in _EVENT_LOCATION_HINTS.items():
@@ -327,6 +425,7 @@ def load_story_graph(
         statements_loaded=statements_loaded,
         placeholders_created=placeholders_created,
         skipped_low_confidence=skipped_low_confidence,
+        unresolved_higher_order=tuple(unresolved_higher_order),
         unknown_predicates=tuple(sorted(unknown_predicates)),
     )
     return graph, report

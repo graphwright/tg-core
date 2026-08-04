@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Generic, TypeVar
 
-from base import BaseStatement, EntityInstance, Symmetric, Transitive
+from base import AnyStatement, BaseStatement, EntityInstance, Symmetric, Transitive
 
 
 class SherlockEntity(EntityInstance):
@@ -90,6 +90,26 @@ class HappenedIn(StoryStatement[Event, Location]):
     This captures event->place structure that is often only implicit in event
     identifiers/descriptions from extraction output.
     """
+
+
+class StoryMetadata(EntityInstance):
+    """Mixin-like metadata shape shared by extracted higher-order statements."""
+
+    story_id: str
+    paragraph_index: int | None = None
+    sentence_ids: tuple[int, ...] = ()
+    asserting_narrator_id: str | None = None
+    extraction_confidence: float | None = None
+    narrator_confidence: float | None = None
+    raw_extraction_method: str | None = None
+
+
+class KnewAt(BaseStatement[Person, AnyStatement], StoryMetadata):
+    """A person knew a proposition at a point in the story."""
+
+
+class Contradicts(BaseStatement[AnyStatement, AnyStatement], StoryMetadata, Symmetric):
+    """Two propositions are mutually contradictory."""
 
 
 class PhysicallyIn(BaseStatement[Object, Location]):

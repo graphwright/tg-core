@@ -5,9 +5,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Iterable, cast, get_args, get_origin, get_type_hints
-
-from pydantic import InstanceOf
+from typing import Any, Iterable, cast, get_origin, get_type_hints
 
 from base import AnyStatement, BaseStatement, ExtractionMethod, Provenance, TruthStatus
 from graph import Graph
@@ -152,11 +150,10 @@ def _is_statement_slot(predicate_cls: PredicateType, field_name: str) -> bool:
     annotation = get_type_hints(predicate_cls, include_extras=True)[field_name]
     if annotation is AnyStatement:
         return True
-    origin = get_origin(annotation)
-    if origin is InstanceOf:
-        args = get_args(annotation)
-        return bool(args) and args[0] is BaseStatement[Any, Any]
     try:
+        origin = get_origin(annotation)
+        if origin is not None:
+            return isinstance(origin, type) and issubclass(origin, BaseStatement)
         return isinstance(annotation, type) and issubclass(annotation, BaseStatement)
     except TypeError:
         return False

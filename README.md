@@ -173,11 +173,7 @@ it straightforward to save a graph to a `.py` file and reload it with a plain
 
 ## Solve-and-ProbLog Pipeline
 
-The Sherlock subproject is a worked reasoning demo for *A Scandal in Bohemia*.
-The concrete question is the story's central mystery: where is Irene Adler's
-incriminating photograph hidden?
-
-The Sherlock mystery flow is intentionally split into two stages:
+There are two kinds of reasoning supported here.
 
 1. Deterministic solve (Horn clause via `datalog.Engine`)
 2. Probabilistic ranking (ProbLog, optional)
@@ -190,40 +186,6 @@ candidates using curated primitive random variables and evidence conditioning.
 This keeps the core typed-graph + Datalog model transparent and truth-preserving,
 while still supporting best-explanation ranking when the graph underdetermines a
 single answer.
-
-## Running the Mystery Modes
-
-Run from the repository root.
-
-Default import summary mode:
-
-```bash
-uv run python -m sherlock.demo
-```
-
-Deterministic mystery solve (Horn clause only):
-
-```bash
-SOLVE_MYSTERY=1 uv run python -m sherlock.demo
-```
-
-Probabilistic ranking mode (requires optional `problog` install):
-
-```bash
-SOLVE_MYSTERY_PROBLOG=1 uv run python -m sherlock.demo
-```
-
-Optional dataset controls:
-
-```bash
-SHERLOCK_DATASET_DIR=./sherlock/data SHERLOCK_STORY_PREFIX=bohemia uv run python -m sherlock.demo
-```
-
-Suggested verification for the probabilistic layer:
-
-```bash
-uv run pytest tests/test_sherlock_problog_adapter.py tests/test_sherlock_problog_scenario.py
-```
 
 ---
 
@@ -378,10 +340,10 @@ grammar or parser. See `formal-defns.md` §Trait vocabulary for the formal treat
 ### ProbLog when deduction is not enough
 
 `Rule` is the escape hatch for deterministic logical inference. When deduction returns
-multiple plausible candidates (as in the Sherlock mystery), the optional ProbLog layer
+multiple plausible candidates, the optional ProbLog layer
 provides ranking by conditioning on evidence over a small set of primitive random
 variables. In other words: keep Horn clauses for what must follow, then use ProbLog
-for what is most likely among the remaining possibilities. See [docs/problog.md](docs/problog.md) for the design note and [sherlock/problog_adapter.py](sherlock/problog_adapter.py) for the adapter used by the demo.
+for what is most likely among the remaining possibilities. See [docs/problog.md](docs/problog.md) for the design note.
 
 Example (ProbLog syntax):
 

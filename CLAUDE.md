@@ -145,10 +145,3 @@ ontology language, not a stringly-typed system. See `formal-defns.md` §Non-Goal
 ## Worked domain
 
 `example.py` currently uses a minimal `Person` / `Organization` / `WorksFor` example.
-The intended larger worked example is the **Sherlock Holmes canon**, with Baker Street
-Wiki (https://bakerstreet.fandom.com) as the ontology authority for entity ids. A
-reference implementation of that schema (`holmes_schema.py`) exists in sibling projects
-on this machine (`../formal-def-20260604`, `../ner-20260608`) — useful as prior art, but
-they are **separate repositories**, not part of this one. Note a deliberate
-difference: those repos make provenance mandatory, whereas here provenance is optional
-(R10) — a statement is either grounded or explicitly ungrounded.

@@ -46,39 +46,14 @@ exercise.
 
 ---
 
-## 2. Why deduction stops here
-
-The reason the photograph lands in nine places at once is worth stating
-precisely, because it is a fact about the *data*, not a bug in the rule.
-
-Irene Adler is `AssociatedWith` twelve different locations across the story. The
-rule ties the photograph to wherever its possessor is associated — so it
-inherits all of her associations. Nothing in the rule prefers the sitting room.
-
-A human reader knows the answer is the sitting room for a specific reason: it is
-where Holmes is carried in — feigning injury — at the **very moment** Irene
-bolts to check that her most precious possession is safe. The event
-`adler_rushes_to_photograph` and the event `holmes_carried_into_sitting_room`
-share the moment `holmes_learns_photograph_location`. That temporal coincidence
-*is* the clue.
-
-But here is the catch we discovered by inspecting the graph: **that clue is not
-in the graph as a fact.** The reveal event carries its location only inside its
-name string (`..._into_sitting_room`); it is never expressed as an
-event → location edge. The source triplets contain no event-location predicate
-at all. So no Horn clause over the existing facts can single out the sitting
-room, because the discriminating information was never extracted as structure.
+## 3. Deduction vs. abduction
 
 Deduction is monotonic and truth-preserving: it can only tell you what
 *necessarily follows* from what you already assert. When the graph
 underdetermines the answer, deduction returns the whole admissible set and
 stops. That is the honest thing for it to do.
 
----
-
-## 3. Deduction vs. abduction
-
-What a detective actually does is not deduction. It is **abduction** — inference
+Real-world reasoning more frequently calls for **abduction** — inference
 to the best explanation.
 
 - **Deduction** runs forward: premises → the conclusion they force.
@@ -88,11 +63,9 @@ to the best explanation.
   rained.*
 
 Abduction is not truth-preserving. The grass could be wet from a sprinkler.
-Sherlock's leaps — "the photograph is behind the sliding panel" — are abductive:
-he picks the hypothesis that best explains what he observed, not a conclusion
-forced by logic. Our datalog engine is purely deductive, which is precisely why
-it produces a candidate set and no ranking. The ranking *is* the abductive step,
-and it needs machinery deduction does not have.
+Our datalog engine is purely deductive, which is precisely why it produces a
+candidate set and no ranking. The ranking *is* the abductive step, and it
+needs machinery deduction does not have.
 
 Several candidate explanations fit the facts. We need a principled way to say
 which one is **most likely** — and, just as importantly, to **eliminate** the
@@ -100,57 +73,7 @@ ones that contradict other evidence. That is where probability enters.
 
 ---
 
-## 4. "I never guess": grounding without certainty
-
-There is a natural objection here, and it comes from Holmes himself. In *The
-Sign of Four* he says: *"I never guess. It is a shocking habit — destructive to
-the logical faculty."* One might read that as: Holmes wants Boolean certainty; he
-would never traffic in probabilities.
-
-That reading is a misinterpretation, and untangling it clarifies the whole
-design.
-
-What Holmes condemns is **guessing** — asserting a conclusion with *no evidence
-under it*, pulling an answer from nowhere. That is not the opposite of
-probability. It is the opposite of *inference from evidence*. A guess is a
-probability with no support: a naked prior. What Holmes does is the reverse — he
-conditions relentlessly on observed facts and updates.
-
-And his own conclusions are almost never certain. His most famous maxim gives the
-game away: *"When you have eliminated the impossible, whatever remains, however
-improbable, must be the truth."* That sentence does two things that map exactly
-onto probabilistic inference:
-
-1. It **rules possibilities to probability zero** using evidence
-   ("eliminated the impossible").
-2. It **ranks whatever survives** and accepts the most probable — *"however
-   improbable"* is an explicit admission that the answer need not be certain,
-   only the best remaining.
-
-Holmes is not a Boolean reasoner who hates probability. He is a Bayesian who
-hates *unconditioned* priors. The thing he loathes — the guess — is exactly a
-conclusion with no traceable support.
-
-This is why **grounding** matters even once we give up certainty. Our typed
-graph already encodes this: every statement carries a `provenance` field, and a
-statement is *grounded* when it has a traceable source and *ungrounded* when it
-does not. The `truth_status` vocabulary
-(`asserted_true`, `asserted_false`, `hypothetical`, `disputed`, `retracted`)
-tracks epistemic standing directly. An ungrounded hypothetical with no
-provenance is, in Holmes's terms, a guess — inadmissible. A grounded fact
-traceable to an observation is evidence — admissible.
-
-When we move to probabilities, grounding does not go away. It becomes the thing
-that distinguishes an *evidence-based probability* (a likelihood earned from a
-sourced observation) from a *guess dressed up in a number*. The probabilistic
-layer must inherit the provenance discipline, not discard it. Uncertainty is
-allowed; unsupported assertion is not.
-
----
-
-## 5. Boolean reasoner vs. Bayesian reasoner
-
-The shift we are making is a shift in what a truth value *is*.
+## 4. Boolean reasoner vs. Bayesian reasoner
 
 A **Boolean reasoner** works with facts that are true or false. Inference
 composes **locally**: to evaluate `A ∧ B` you need only `A` and `B`. Our current
@@ -206,7 +129,7 @@ why they are correlated, and why modeling them as primitives would be the error.
 
 ---
 
-## 6. ProbLog: probabilistic logic programming
+## 5. ProbLog: probabilistic logic programming
 
 We do not need to invent this from scratch. **ProbLog**, developed by the DTAI
 group at KU Leuven, is a mature system that does precisely what we are reaching
@@ -260,10 +183,7 @@ evidence(smokes(angelika), false).
 query(smokes(joris)).
 ```
 
-This is **the Holmes elimination principle, mechanized.** "Irene is not at
-location X" becomes `evidence(..., false)`; the marginals over the remaining
-candidates renormalize; the ranking updates. Ruling out the impossible and
-ranking the improbable remainder — the two halves of the famous maxim — are
+Ruling out the impossible and ranking the improbable remainder are
 `evidence(...)` and marginal computation respectively. The abductive
 "eliminate possibilities" behavior we needed lives *inside* the probabilistic
 framework; we do not need a separate constraint layer for the basic case.

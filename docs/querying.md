@@ -202,24 +202,24 @@ provenance, or needs to be referenced by other statements.
 
 ```json
 {
-  "id": "stmt:wiki:Sherlock_Holmes:Possesses:obj:cigar_case",
+  "id": "stmt:exp:Dr_Lina_Chen:Observed:obj:ice_crystals",
   "node_kind": "statement",
-  "predicate": "Possesses",
-  "subject_id": "wiki:Sherlock_Holmes",
-  "object_id": "obj:cigar_case",
+  "predicate": "Observed",
+  "subject_id": "exp:Dr_Lina_Chen",
+  "object_id": "obj:ice_crystals",
   "truth_status": "asserted_true",
-  "story_id": "sib",
-  "paragraph_index": 4,
-  "sentence_ids": [12, 13],
-  "asserting_narrator_id": "wiki:Dr_Watson",
+  "story_id": "mission-log-17",
+  "paragraph_index": 9,
+  "sentence_ids": [31, 32],
+  "asserting_narrator_id": "exp:Mission_Controller",
   "extraction_method": "structured_extraction",
   "extraction_confidence": 0.94
 }
 ```
 
 A statement node's `subject_id` and `object_id` can themselves point at other statement nodes,
-not just entities — enabling meta-statements such as "Watson doubts that [Holmes possesses the
-cigar case]," where the doubted claim is the object of a second statement.
+not just entities — enabling meta-statements such as "the controller disputes that [Dr. Lina
+Chen observed ice crystals]," where the disputed claim is the object of a second statement.
 
 Consequences for the query language above:
 
@@ -442,46 +442,10 @@ when the question is about the graph's *contents* rather than about a *neighborh
 
 ---
 
-## Scandal in Bohemia: Query Right Before the Reveal
-
-The interesting Sherlock question is often:
-
-"Given what is known immediately before Holmes announces the answer, where is
-Irene Adler's photograph?"
-
-This is a two-step pattern:
-
-1. Use query primitives (`bfs_query()` / `scan_query()`) to gather the relevant
-  local facts and timeline clues.
-2. Apply rule-layer inference (a hand-written Horn clause) to produce the final
-  location statement.
-
-Why split it this way:
-
-- Query tools are great for neighborhood and filtering.
-- The final leap is a cross-predicate join that is best represented as an
-  explicit rule.
-
-In this repository, that end-to-end flow is implemented in `sherlock/demo.py`
-under `SOLVE_MYSTERY=1`.
-
-Typical fact pattern to retrieve before applying the rule:
-
-- Possession facts for Irene and the photograph.
-- Event participation around the staged fire-alarm sequence.
-- Time anchoring for those events (`OccurredAt` moments).
-- Location context for the key room when available.
-
-This keeps querying focused on collecting evidence and keeps inference explicit,
-auditable, and reproducible.
-
----
-
 ## ID Canonicalization
 
 Entities are sometimes named more than one way in source data — a full URL and a short slug
-ID, for instance. The query layer should canonicalize known alternate forms (e.g.
-`https://example.org/wiki/Sherlock_Holmes` → `wiki:Sherlock_Holmes`) transparently on every ID
+ID, for instance. The query layer should canonicalize known alternate forms transparently on every ID
 accepted as input (`seeds`, `start`, entity IDs embedded in filters) and every ID returned in a
 response, so the LLM never has to normalize IDs itself or treat two spellings of the same ID as
 different nodes. This does not replace `search_entities()` — canonicalization only maps one
@@ -625,7 +589,7 @@ so the default `asserted_true`-only traversal would hide exactly what you're loo
 
 ```json
 {
-  "seeds": ["wiki:Sherlock_Holmes"],
+  "seeds": ["someEntity"],
   "max_hops": 2,
   "truth_status": ["asserted_true", "disputed", "hypothetical", "retracted"]
 }

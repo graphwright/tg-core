@@ -287,7 +287,7 @@ Use these terms consistently throughout the book. Do not treat them as synonyms.
 | **Instance**          | A member of $V$ — the common root of both sorts. Realized as the Python class `Instance`, which carries the `id` field and the frozen model configuration. Every entity instance and every statement is an Instance; nothing else is. |
 | **Entity type**       | A member of $T_\text{ent}$. Realized as a Python class inheriting from `EntityInstance`. Defines a class of entities: the fields they carry and their permitted roles in predicates. Example: `Person`, `Location`, `Moment`. |
 | **Predicate type**    | A member of $T_\text{pred}$. Realized as a Python class inheriting from `BaseStatement`. Defines a class of propositions: their field schema, domain, range, traits, and truth status. Example: `LocatedIn`, `KnewAt`, `Treats`. |
-| **Entity instance**   | A member of $V$ with $\tau(v) \in T_\text{ent}$. A concrete node — an instance of an `EntityInstance` subclass with an `id` and data fields. Example: a specific `Person` instance for Sherlock Holmes. A Statement is *not* an entity instance; both are Instances. |
+| **Entity instance**   | A member of $V$ with $\tau(v) \in T_\text{ent}$. A concrete node — an instance of an `EntityInstance` subclass with an `id` and data fields. A Statement is *not* an entity instance; both are Instances. |
 | **Statement**         | A member of $V$ with $\tau(v) \in T_\text{pred}$. A concrete proposition — an instance of a `BaseStatement` subclass with an `id`, a `subject`, an `object_`, a `truth_status`, and metadata fields. Also a member of $E$ (the derived edge set). The term "edge instance" is an informal synonym when traversing the asserted graph. |
 | **Field schema**      | $\Phi(t)$: the Pydantic model declaration of named fields and their types for type $t$. For predicate types, $\Phi$ includes `subject`, `object_`, and `truth_status` as distinguished fields whose type annotations constitute domain, range, and truth semantics. |
 | **Domain**            | $\text{dom}(p)$ — the set of types permitted in the subject role for predicate $p$. Read from the type annotation of `subject` in $\Phi(p)$. When $\text{dom}(p)$ includes a predicate type (i.e. a `BaseStatement` subclass), predicate $p$ takes a statement as its subject — see R8. |
@@ -404,8 +404,7 @@ The id string must never be parsed to recover type or relationship structure —
 is the exclusive responsibility of $\tau$ and the Python class hierarchy. Any code
 that branches on id content to determine a type is a violation of R6 and R9.
 
-Human-readable id schemes (external ontology keys such as `wiki:Sherlock_Holmes`,
-corpus-namespaced slugs) are permitted as long as no code parses them for type
+Human-readable id schemes are permitted as long as no code parses them for type
 dispatch. Synthetic internal entities (events, moments, plans) with no external
 ontology anchor should use corpus-namespaced slugs without a type segment
 (e.g. `sib:kings_visit`, not `sib:event:kings_visit`).
@@ -491,18 +490,3 @@ on a type is a violation of R6. Human-readable id schemes (external ontology key
 corpus-namespaced slugs) are not themselves a violation — the violation is parsing
 them for type dispatch. Human-readable display is the responsibility of `__str__`,
 not `id`.
-
----
-
-## Current Domain: Holmes Corpus
-
-The worked example uses the Sherlock Holmes canon as domain.
-
-- **Ontology authority**: Baker Street Wiki (https://bakerstreet.fandom.com)
-- **Schema construction method**: inductive — built by annotating stories, not pre-designed
-- **Primary stories**: "A Scandal in Bohemia" (complete); "The Speckled Band" (planned)
-- **Provisional entity types**: `Person`, `Location`, `Object`, `Document`,
-  `Moment`, `Event`, `Persona`, `Plan`
-- **Higher-order predicates**: `KnewAt` (statement in range only — an agent's epistemic attitude toward a proposition), `Contradicts` (statement in both domain and range — a symmetric relation between two propositions, no agent role)
-- **Epistemic fields on predicate instances**: `moment`, `narrator_confidence`,
-  provenance fields

@@ -8,6 +8,7 @@ dependencies = [
     "datalog>=0.7.8",
     "problog>=2.2.10",
     "pydantic>=2.13.4",
+    "rg>=0.0.76",
     "ruff>=0.15.21",
 ]
 
